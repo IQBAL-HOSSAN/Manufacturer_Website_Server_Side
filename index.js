@@ -75,6 +75,40 @@ async function run() {
       res.send({ updateUser, token });
     });
 
+    // get all users
+    app.get("/users", async (req, res) => {
+      const query = {};
+      const users = await userCollection.find(query).toArray();
+      res.send(users);
+    });
+
+    // make admin
+    app.put("/user/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const requester = req.decoded.email;
+      const requesterAccount = await userCollection.findOne({
+        email: requester,
+      });
+      if (requesterAccount.role === "admin") {
+        const query = { email: email };
+        const updateDoc = {
+          $set: {
+            role: "admin",
+          },
+        };
+        const makeAdmin = await userCollection.updateOne(query, updateDoc);
+        res.send(makeAdmin);
+      } else res.status(403).send({ message: "forbidden" });
+    });
+
+    // get admin
+    app.get("/admin/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await userCollection.findOne({ email: email });
+      const isAdmin = user?.role === "admin";
+
+      res.send({ admin: isAdmin });
+    });
     /* ----------------------------------------
                   parts api's
     --------------------------------------------- */
