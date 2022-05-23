@@ -3,10 +3,29 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 8000;
 const dotenv = require("dotenv");
+const jwt = require("jsonwebtoken");
+
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // Use Middle ware
 app.use(cors());
 app.use(express.json());
+
+// create jwt token
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "UnAuthorized access" });
+  }
+  const token = authHeader.split(" ")[1];
+  jwt.verify(token, "process.env.TOKEN_SECRET_KEY", function (err, decoded) {
+    if (err) {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+}
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri =
@@ -26,6 +45,39 @@ async function run() {
     const orderCollection = client
       .db("electronics-manufacturer")
       .collection("orders");
+    const userCollection = client
+      .db("electronics-manufacturer")
+      .collection("users");
+
+    // jwt sign
+
+    /* --------------------------------------
+                    users api's
+      -------------------------------------- */
+
+    // update user or create
+    app.put("/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+      const filter = { email: email };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: user,
+      };
+
+      const updateUser = await userCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      const token = jwt.sign({ email: email }, "process.env.TOKEN_SECRET_KEY");
+
+      res.send({ updateUser, token });
+    });
+
+    /* ----------------------------------------
+                  parts api's
+    --------------------------------------------- */
 
     // get all parts
     app.get("/parts", async (req, res) => {
@@ -44,7 +96,7 @@ async function run() {
     });
 
     /* ---------------------------------------------------
-                      order part 
+                      order api's  
     -----------------------------------------------------*/
     // create an order
     app.post("/orders", async (req, res) => {
@@ -63,20 +115,44 @@ async function run() {
     });
 
     // get order byt id
-    app.get("/orders/:id", async (req, res) => {
-      const id = req.params.email;
+    app.get("/order/:id", async (req, res) => {
+      const id = req.params.id;
       const query = { _id: ObjectId(id) };
 
-      const order = await orderCollection.findOne(query);
-      res.status(200).json(order);
+      const getOrder = await orderCollection.findOne(query);
+      res.send(getOrder);
     });
-    // delete the order
+
+    // delete the order by id
     app.delete("/orders/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: ObjectId(id) };
       const deleteOrder = await orderCollection.deleteOne(query);
       res.send(deleteOrder);
     });
+
+    /* ---------------------------------------------------
+                  Payment api's 
+    ---------------------------------------------------- */
+
+    app.post("/create-payment-intent", async (req, res) => {
+      const order = req.body;
+      const price = order.price;
+      const amount = price * 100;
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+
+      res.send({ clientSecret: paymentIntent.client_secret });
+    });
+
+    /* ---------------------------------------------------
+                  Admin api's 
+    ---------------------------------------------------- */
+    // make admin
   } finally {
     // await client.close();
   }
