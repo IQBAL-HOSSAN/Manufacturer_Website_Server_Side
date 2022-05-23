@@ -61,6 +61,22 @@ async function run() {
       const getOrder = await orderCollection.find(query).toArray();
       res.send(getOrder);
     });
+
+    // get order byt id
+    app.get("/orders/:id", async (req, res) => {
+      const id = req.params.email;
+      const query = { _id: ObjectId(id) };
+
+      const order = await orderCollection.findOne(query);
+      res.status(200).json(order);
+    });
+    // delete the order
+    app.delete("/orders/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const deleteOrder = await orderCollection.deleteOne(query);
+      res.send(deleteOrder);
+    });
   } finally {
     // await client.close();
   }
