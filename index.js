@@ -53,6 +53,9 @@ async function run() {
     const paymentCollection = client
       .db("electronics-manufacturer")
       .collection("payments");
+    const reviewCollection = client
+      .db("electronics-manufacturer")
+      .collection("reviews");
 
     // jwt sign
 
@@ -220,8 +223,25 @@ async function run() {
         currency: "usd",
         payment_method_types: ["card"],
       });
-
       res.send({ clientSecret: paymentIntent.client_secret });
+    });
+
+    /* ---------------------------------------------------
+                  Add review api's 
+    ---------------------------------------------------- */
+
+    // create add review
+    app.post("/review", verifyToken, async (req, res) => {
+      const review = req.body;
+      const addReview = await reviewCollection.insertOne(review);
+      res.send({ message: "Review added successfully" });
+    });
+
+    // get review
+    app.get("/review", async (req, res) => {
+      const query = {};
+      const reviews = await reviewCollection.find(query).toArray();
+      res.send(reviews);
     });
   } finally {
     // await client.close();
