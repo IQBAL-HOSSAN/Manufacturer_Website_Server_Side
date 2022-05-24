@@ -75,7 +75,10 @@ async function run() {
       }
     };
 
-    // update user or create
+    /* ------------------------------------------
+                  user api's
+    --------------------------------------------- */
+    // first timeupdate user or create. when need to send on database
     app.put("/user/:email", async (req, res) => {
       const email = req.params.email;
       const user = req.body;
@@ -95,14 +98,27 @@ async function run() {
       res.send({ updateUser, token });
     });
 
-    // get all users
-    app.get("/users", async (req, res) => {
-      const query = {};
-      const users = await userCollection.find(query).toArray();
-      res.send(users);
+    // update user info
+    app.put("/updateUser/:email", async (req, res) => {
+      const email = req.params.email;
+      const userInfo = req.body;
+      const filter = { email: email };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: userInfo,
+      };
+
+      const updateUser = await userCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      const token = jwt.sign({ email: email }, "process.env.TOKEN_SECRET_KEY");
+
+      res.send({ updateUser, token });
     });
 
-    // make admin
+    // make admin means update user
     app.put(
       "/user/admin/:email",
       verifyToken,
@@ -126,9 +142,25 @@ async function run() {
       const user = await userCollection.findOne({ email: email });
       const isAdmin = user?.role === "admin";
 
-      res.send({ admin: isAdmin });
+      res.send({ admin: isAdmin, user: user });
     });
-    /* ----------------------------------------
+
+    // get all users
+    app.get("/users", async (req, res) => {
+      const query = {};
+      const users = await userCollection.find(query).toArray();
+      res.send(users);
+    });
+
+    // get  user by login email
+    app.get("/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await userCollection.find(query).toArray();
+      res.send(user);
+    });
+
+    /* ------------------------------------------
                   parts api's
     --------------------------------------------- */
 
