@@ -5,7 +5,9 @@ const port = process.env.PORT || 8000;
 const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
 
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(
+  "sk_test_51L0mozGqaNtXNBAWvRE8JaSLMcjTxHot353mILOzKwe6tINLd3mxu44jgqIo4cDRKl64pxbIq7u4k8jsPTexdrjK00Re6zWnxa"
+);
 
 // Use Middle ware
 app.use(cors());
@@ -48,12 +50,27 @@ async function run() {
     const userCollection = client
       .db("electronics-manufacturer")
       .collection("users");
+    const paymentCollection = client
+      .db("electronics-manufacturer")
+      .collection("payments");
 
     // jwt sign
 
     /* --------------------------------------
                     users api's
       -------------------------------------- */
+
+    // Verify Admin
+    const verifyAdmin = async (req, res, next) => {
+      const decodedEmail = req.decoded.email;
+      console.log(decodedEmail);
+      const user = await userCollection.findOne({ email: decodedEmail });
+      if (user.role === "admin") {
+        next();
+      } else {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+    };
 
     // update user or create
     app.put("/user/:email", async (req, res) => {
@@ -83,13 +100,12 @@ async function run() {
     });
 
     // make admin
-    app.put("/user/admin/:email", verifyToken, async (req, res) => {
-      const email = req.params.email;
-      const requester = req.decoded.email;
-      const requesterAccount = await userCollection.findOne({
-        email: requester,
-      });
-      if (requesterAccount.role === "admin") {
+    app.put(
+      "/user/admin/:email",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.params.email;
         const query = { email: email };
         const updateDoc = {
           $set: {
@@ -98,8 +114,8 @@ async function run() {
         };
         const makeAdmin = await userCollection.updateOne(query, updateDoc);
         res.send(makeAdmin);
-      } else res.status(403).send({ message: "forbidden" });
-    });
+      }
+    );
 
     // get admin
     app.get("/admin/:email", async (req, res) => {
@@ -127,6 +143,13 @@ async function run() {
 
       const getPartById = await partsCollection.findOne(query);
       res.send(getPartById);
+    });
+
+    // create part
+    app.post("/part", verifyToken, verifyAdmin, async (req, res) => {
+      const part = req.body;
+      const createPart = await partsCollection.insertOne(part);
+      res.send({ message: "part successfully create" });
     });
 
     /* ---------------------------------------------------
@@ -157,6 +180,24 @@ async function run() {
       res.send(getOrder);
     });
 
+    // update order price
+    app.patch("/order/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const payment = req.body;
+      const filter = { _id: ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          paid: true,
+          transactionId: payment.transactionId,
+        },
+      };
+
+      const updatedOrder = await orderCollection.updateOne(filter, updatedDoc);
+      const paymentOrder = await paymentCollection.insertOne(payment);
+
+      res.send(updatedDoc);
+    });
+
     // delete the order by id
     app.delete("/orders/:id", async (req, res) => {
       const id = req.params.id;
@@ -166,14 +207,14 @@ async function run() {
     });
 
     /* ---------------------------------------------------
-                  Payment api's 
+                  Payment intent api's 
     ---------------------------------------------------- */
 
-    app.post("/create-payment-intent", async (req, res) => {
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const order = req.body;
       const price = order.price;
       const amount = price * 100;
-
+      console.log(amount);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: "usd",
@@ -182,11 +223,6 @@ async function run() {
 
       res.send({ clientSecret: paymentIntent.client_secret });
     });
-
-    /* ---------------------------------------------------
-                  Admin api's 
-    ---------------------------------------------------- */
-    // make admin
   } finally {
     // await client.close();
   }
