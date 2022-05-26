@@ -2,12 +2,10 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 8000;
-const dotenv = require("dotenv");
+require("dotenv").config();
 const jwt = require("jsonwebtoken");
 
-const stripe = require("stripe")(
-  "sk_test_51L0mozGqaNtXNBAWvRE8JaSLMcjTxHot353mILOzKwe6tINLd3mxu44jgqIo4cDRKl64pxbIq7u4k8jsPTexdrjK00Re6zWnxa"
-);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // Use Middle ware
 app.use(cors());
@@ -30,8 +28,7 @@ function verifyToken(req, res, next) {
 }
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const uri =
-  "mongodb+srv://manufacture-user:tHkfX7sfgZslO5nn@cluster0.whmvw.mongodb.net/?retryWrites=true&w=majority";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.whmvw.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -248,14 +245,17 @@ async function run() {
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const order = req.body;
       const price = order.price;
-      const amount = price * 100;
-      console.log(amount);
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amount,
-        currency: "usd",
-        payment_method_types: ["card"],
-      });
-      res.send({ clientSecret: paymentIntent.client_secret });
+      if (price) {
+        const convertPrice = parseInt(price);
+        const amount = convertPrice * 100;
+        console.log(price, convertPrice, amount);
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: ["card"],
+        });
+        res.send({ clientSecret: paymentIntent.client_secret });
+      }
     });
 
     /* ---------------------------------------------------
